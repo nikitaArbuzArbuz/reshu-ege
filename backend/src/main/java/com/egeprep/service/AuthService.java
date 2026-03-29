@@ -25,7 +25,7 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthDtos.AuthResponse register(AuthDtos.RegisterRequest req) {
+    public AuthDtos.AuthResult register(AuthDtos.RegisterRequest req) {
         if (userRepository.existsByEmailIgnoreCase(req.email())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email уже зарегистрирован");
         }
@@ -35,10 +35,10 @@ public class AuthService {
         u.setDisplayName(req.displayName().trim());
         u.setRole(Role.STUDENT);
         userRepository.save(u);
-        return toResponse(u);
+        return toResult(u);
     }
 
-    public AuthDtos.AuthResponse login(AuthDtos.LoginRequest req) {
+    public AuthDtos.AuthResult login(AuthDtos.LoginRequest req) {
         User u = userRepository.findByEmailIgnoreCase(req.email().trim().toLowerCase())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Неверный логин или пароль"));
         if (!passwordEncoder.matches(req.password(), u.getPasswordHash())) {
@@ -53,17 +53,17 @@ public class AuthService {
         if (!"STUDENT".equals(portal) && !"TEACHER".equals(portal)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "portal должен быть STUDENT или TEACHER");
         }
-        return toResponse(u);
+        return toResult(u);
     }
 
-    public AuthDtos.MeResponse me(Long userId) {
+    public AuthDtos.UserProfile me(Long userId) {
         User u = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        return new AuthDtos.MeResponse(u.getId(), u.getEmail(), u.getDisplayName(), u.getRole());
+        return new AuthDtos.UserProfile(u.getId(), u.getEmail(), u.getDisplayName(), u.getRole());
     }
 
-    private AuthDtos.AuthResponse toResponse(User u) {
+    private AuthDtos.AuthResult toResult(User u) {
         String token = jwtService.generateToken(u.getId(), u.getEmail(), u.getRole());
-        return new AuthDtos.AuthResponse(token, "Bearer", u.getId(), u.getEmail(), u.getDisplayName(), u.getRole());
+        return new AuthDtos.AuthResult(token, new AuthDtos.UserProfile(u.getId(), u.getEmail(), u.getDisplayName(), u.getRole()));
     }
 }

@@ -21,9 +21,7 @@ public class AuthDtos {
     ) {
     }
 
-    public record AuthResponse(
-            String token,
-            String tokenType,
+    public record UserProfile(
             Long userId,
             String email,
             String displayName,
@@ -31,11 +29,6 @@ public class AuthDtos {
     ) {
     }
 
-    public record MeResponse(
-            Long userId,
-            String email,
-            String displayName,
-            Role role
-    ) {
+    public record AuthResult(String accessToken, UserProfile user) {
     }
 }

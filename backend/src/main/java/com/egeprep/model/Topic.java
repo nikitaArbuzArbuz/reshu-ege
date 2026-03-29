@@ -5,17 +5,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "topics")
+@Table(name = "topics", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_topics_subject_slug", columnNames = {"subject_id", "slug"})
+})
 public class Topic {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "subject_id")
+    private Subject subject;
+
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String slug;
 
     @Column(name = "sort_order", nullable = false)
@@ -31,6 +37,14 @@ public class Topic {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Subject getSubject() {
+        return subject;
+    }
+
+    public void setSubject(Subject subject) {
+        this.subject = subject;
     }
 
     public String getName() {

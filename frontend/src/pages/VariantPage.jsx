@@ -1,20 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import api from '../api'
 import { useAuth } from '../auth'
 
+const ALLOC_KEY = 'egeVariantAllocations'
+
 export default function VariantPage() {
   const { user, logout } = useAuth()
-  const [params] = useSearchParams()
-  const subtopicIds = useMemo(() => {
-    const raw = params.get('subtopicIds') || ''
-    return raw
-      .split(',')
-      .map((x) => Number(x.trim()))
-      .filter((n) => !Number.isNaN(n) && n > 0)
-  }, [params])
-  const taskCount = Math.min(50, Math.max(1, Number(params.get('taskCount')) || 5))
-
+  const [allocations, setAllocations] = useState(null)
   const [tasks, setTasks] = useState([])
   const [answers, setAnswers] = useState({})
   const [result, setResult] = useState(null)
@@ -22,13 +15,41 @@ export default function VariantPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (subtopicIds.length === 0) {
+    let raw
+    try {
+      raw = sessionStorage.getItem(ALLOC_KEY)
+    } catch {
+      setErr('Не удалось прочитать настройки варианта')
+      setLoading(false)
+      return
+    }
+    if (!raw) {
+      setErr('Вариант не задан. Вернитесь на главную и укажите число задач по подтемам.')
+      setLoading(false)
+      return
+    }
+    let parsed
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      setErr('Некорректные данные варианта')
+      setLoading(false)
+      return
+    }
+    if (!Array.isArray(parsed) || parsed.length === 0) {
       setErr('Не выбраны подтемы')
       setLoading(false)
       return
     }
+    setAllocations(parsed)
+  }, [])
+
+  useEffect(() => {
+    if (!allocations) return
+    setLoading(true)
+    setErr('')
     api
-      .post('/variant/build', { subtopicIds, taskCount })
+      .post('/variant/build', { allocations })
       .then((r) => {
         setTasks(r.data.tasks)
         setAnswers({})
@@ -38,7 +59,7 @@ export default function VariantPage() {
         setErr(ex.response?.data?.error || 'Не удалось собрать вариант')
       })
       .finally(() => setLoading(false))
-  }, [subtopicIds, taskCount])
+  }, [allocations])
 
   const setMc = (taskId, idx) => {
     setAnswers((a) => ({ ...a, [taskId]: { selectedIndex: idx } }))
@@ -97,7 +118,7 @@ export default function VariantPage() {
               {t.questionText}
             </div>
             <div className="muted" style={{ marginBottom: '0.5rem' }}>
-              {t.topicName} → {t.subtopicName}
+              {t.subjectName} → {t.topicName} → {t.subtopicName}
             </div>
             {t.type === 'MULTIPLE_CHOICE' && (
               <div className="options">

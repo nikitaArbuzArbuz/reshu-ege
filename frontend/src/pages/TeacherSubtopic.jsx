@@ -3,13 +3,16 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import api from '../api'
 import { useAuth } from '../auth'
 
+const MC_MIN = 2
+const MC_MAX = 12
+
 const emptyForm = {
   type: 'MULTIPLE_CHOICE',
   questionText: '',
   correctOptionIndex: 0,
   correctAnswers: [''],
   explanation: '',
-  options: ['', '', '', '']
+  options: ['', '']
 }
 
 export default function TeacherSubtopic() {
@@ -23,18 +26,7 @@ export default function TeacherSubtopic() {
 
   const load = () => {
     api.get(`/teacher/subtopics/${id}/tasks`).then((r) => setTasks(r.data))
-    api.get('/topics').then((r) => {
-      const topics = r.data
-      Promise.all(topics.map((t) => api.get(`/topics/${t.id}`))).then((res) => {
-        for (const x of res) {
-          const sub = x.data.subtopics.find((s) => String(s.id) === String(id))
-          if (sub) {
-            setMeta({ topicName: x.data.name, subtopicName: sub.name })
-            break
-          }
-        }
-      })
-    })
+    api.get(`/subtopics/${id}`).then((r) => setMeta(r.data))
   }
 
   useEffect(() => {
@@ -48,13 +40,30 @@ export default function TeacherSubtopic() {
   const save = async (e) => {
     e.preventDefault()
     setErr('')
+    let optionsPayload = null
+    if (form.type === 'MULTIPLE_CHOICE') {
+      const opts = form.options.map((x) => x.trim())
+      if (opts.some((x) => !x)) {
+        setErr('Заполните все варианты ответа')
+        return
+      }
+      if (opts.length < MC_MIN || opts.length > MC_MAX) {
+        setErr(`Число вариантов: от ${MC_MIN} до ${MC_MAX}`)
+        return
+      }
+      if (form.correctOptionIndex < 0 || form.correctOptionIndex >= opts.length) {
+        setErr('Выберите верный вариант из списка')
+        return
+      }
+      optionsPayload = opts
+    }
     const body = {
       type: form.type,
       questionText: form.questionText,
       explanation: form.explanation || null,
       correctOptionIndex: form.type === 'MULTIPLE_CHOICE' ? Number(form.correctOptionIndex) : null,
       correctAnswers: form.type === 'TEXT' ? form.correctAnswers.filter((x) => x.trim()) : null,
-      options: form.type === 'MULTIPLE_CHOICE' ? form.options : null
+      options: optionsPayload
     }
     try {
       if (editingId) {
@@ -72,13 +81,17 @@ export default function TeacherSubtopic() {
 
   const edit = (t) => {
     setEditingId(t.id)
+    const sorted = t.options?.length
+      ? [...t.options].sort((a, b) => a.orderIndex - b.orderIndex).map((o) => o.optionText)
+      : ['', '']
+    const opts = sorted.length >= MC_MIN ? sorted : [...sorted, ...Array(MC_MIN - sorted.length).fill('')]
     setForm({
       type: t.type,
       questionText: t.questionText,
-      correctOptionIndex: t.correctOptionIndex ?? 0,
+      correctOptionIndex: Math.min(t.correctOptionIndex ?? 0, opts.length - 1),
       correctAnswers: t.correctAnswers?.length ? t.correctAnswers : [''],
       explanation: t.explanation || '',
-      options: t.options?.length === 4 ? t.options.map((o) => o.optionText) : ['', '', '', '']
+      options: opts
     })
   }
 
@@ -87,6 +100,35 @@ export default function TeacherSubtopic() {
     await api.delete(`/teacher/tasks/${taskId}`)
     load()
   }
+
+  const setOption = (i, val) => {
+    setForm((f) => {
+      const opts = [...f.options]
+      opts[i] = val
+      let idx = f.correctOptionIndex
+      if (idx >= opts.length) idx = opts.length - 1
+      return { ...f, options: opts, correctOptionIndex: Math.max(0, idx) }
+    })
+  }
+
+  const addOption = () => {
+    setForm((f) => {
+      if (f.options.length >= MC_MAX) return f
+      return { ...f, options: [...f.options, ''] }
+    })
+  }
+
+  const removeOption = () => {
+    setForm((f) => {
+      if (f.options.length <= MC_MIN) return f
+      const options = f.options.slice(0, -1)
+      let idx = f.correctOptionIndex
+      if (idx >= options.length) idx = options.length - 1
+      return { ...f, options, correctOptionIndex: idx }
+    })
+  }
+
+  const title = meta ? `${meta.subjectName} — ${meta.topicName} — ${meta.subtopicName}` : 'Подтема'
 
   return (
     <>
@@ -107,7 +149,7 @@ export default function TeacherSubtopic() {
         </div>
       </header>
       <div className="container">
-        <h1 style={{ marginTop: 0 }}>{meta ? `${meta.topicName} — ${meta.subtopicName}` : 'Подтема'}</h1>
+        <h1 style={{ marginTop: 0 }}>{title}</h1>
 
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <h2 style={{ marginTop: 0 }}>{editingId ? 'Редактирование' : 'Новая задача'}</h2>
@@ -115,7 +157,7 @@ export default function TeacherSubtopic() {
             <div className="field">
               <label>Тип</label>
               <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}>
-                <option value="MULTIPLE_CHOICE">Тест: 4 варианта</option>
+                <option value="MULTIPLE_CHOICE">Тест: варианты ответа (2–12)</option>
                 <option value="TEXT">Короткий ответ (строка)</option>
               </select>
             </div>
@@ -125,23 +167,27 @@ export default function TeacherSubtopic() {
             </div>
             {form.type === 'MULTIPLE_CHOICE' && (
               <>
-                {[0, 1, 2, 3].map((i) => (
+                {form.options.map((opt, i) => (
                   <div key={i} className="field">
                     <label>Вариант {i + 1}</label>
-                    <input value={form.options[i]} onChange={(e) => {
-                      const opts = [...form.options]
-                      opts[i] = e.target.value
-                      setForm((f) => ({ ...f, options: opts }))
-                    }} required />
+                    <input value={opt} onChange={(e) => setOption(i, e.target.value)} required />
                   </div>
                 ))}
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                  <button type="button" className="btn btn-ghost" onClick={addOption} disabled={form.options.length >= MC_MAX}>
+                    + Вариант
+                  </button>
+                  <button type="button" className="btn btn-ghost" onClick={removeOption} disabled={form.options.length <= MC_MIN}>
+                    − Вариант
+                  </button>
+                </div>
                 <div className="field">
-                  <label>Верный вариант (номер 1–4)</label>
+                  <label>Верный вариант</label>
                   <select
                     value={form.correctOptionIndex}
                     onChange={(e) => setForm((f) => ({ ...f, correctOptionIndex: Number(e.target.value) }))}
                   >
-                    {[0, 1, 2, 3].map((i) => (
+                    {form.options.map((_, i) => (
                       <option key={i} value={i}>
                         {i + 1}
                       </option>

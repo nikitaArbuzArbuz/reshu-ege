@@ -17,6 +17,9 @@ import java.util.List;
 @Service
 public class TeacherTaskService {
 
+    private static final int MC_OPTIONS_MIN = 2;
+    private static final int MC_OPTIONS_MAX = 12;
+
     private final TaskRepository taskRepository;
     private final SubtopicRepository subtopicRepository;
     private final ObjectMapper objectMapper;
@@ -72,11 +75,13 @@ public class TeacherTaskService {
 
     private void validate(TaskDtos.TaskUpsertRequest req) {
         if (req.type() == TaskType.MULTIPLE_CHOICE) {
-            if (req.options() == null || req.options().size() != 4) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Нужно ровно 4 варианта ответа");
+            if (req.options() == null || req.options().size() < MC_OPTIONS_MIN || req.options().size() > MC_OPTIONS_MAX) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Число вариантов ответа: от " + MC_OPTIONS_MIN + " до " + MC_OPTIONS_MAX);
             }
-            if (req.correctOptionIndex() == null || req.correctOptionIndex() < 0 || req.correctOptionIndex() > 3) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "correctOptionIndex от 0 до 3");
+            int maxIdx = req.options().size() - 1;
+            if (req.correctOptionIndex() == null || req.correctOptionIndex() < 0 || req.correctOptionIndex() > maxIdx) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Укажите номер верного варианта в допустимом диапазоне");
             }
         } else if (req.type() == TaskType.TEXT) {
             if (req.correctAnswers() == null || req.correctAnswers().isEmpty()) {
@@ -106,7 +111,7 @@ public class TeacherTaskService {
         if (req.type() != TaskType.MULTIPLE_CHOICE) {
             return;
         }
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < req.options().size(); i++) {
             TaskOption o = new TaskOption();
             o.setTask(t);
             o.setOrderIndex(i);

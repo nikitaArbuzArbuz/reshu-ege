@@ -1,19 +1,65 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import api from '../api'
 import { useAuth } from '../auth'
 
 export default function TeacherHome() {
   const { user, logout, isTeacher, isAdmin } = useAuth()
-  const [topics, setTopics] = useState([])
+  const [subjects, setSubjects] = useState([])
+  const [details, setDetails] = useState({})
+  const [openSubject, setOpenSubject] = useState(() => new Set())
   const [err, setErr] = useState('')
+
+  const loadSubject = useCallback((subjectId) => {
+    if (details[subjectId]) return
+    api.get(`/subjects/${subjectId}`).then((r) => {
+      setDetails((d) => ({ ...d, [subjectId]: r.data }))
+    })
+  }, [details])
 
   useEffect(() => {
     api
-      .get('/topics')
-      .then((r) => setTopics(r.data))
-      .catch(() => setErr('Не удалось загрузить темы'))
+      .get('/subjects')
+      .then((r) => setSubjects(r.data))
+      .catch(() => setErr('Не удалось загрузить предметы'))
   }, [])
+
+  const toggleSubject = (id) => {
+    setOpenSubject((prev) => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id)
+      else {
+        n.add(id)
+        loadSubject(id)
+      }
+      return n
+    })
+  }
+
+  const onSubjectCreated = (row) => {
+    setSubjects((prev) => [...prev, row].sort((a, b) => a.sortOrder - b.sortOrder))
+  }
+
+  const onTopicCreated = (subjectId, row) => {
+    const topicDetail = {
+      id: row.id,
+      subjectId: row.subjectId,
+      subjectName: row.subjectName,
+      name: row.name,
+      slug: row.slug,
+      sortOrder: row.sortOrder,
+      subtopics: []
+    }
+    setDetails((d) => {
+      const cur = d[subjectId]
+      if (!cur) return d
+      const topics = [...cur.topics, topicDetail].sort((a, b) => a.sortOrder - b.sortOrder)
+      return { ...d, [subjectId]: { ...cur, topics } }
+    })
+    setSubjects((prev) =>
+      prev.map((s) => (s.id === subjectId ? { ...s, topicCount: s.topicCount + 1 } : s))
+    )
+  }
 
   if (!isTeacher) {
     return <Navigate to="/" replace />
@@ -45,35 +91,55 @@ export default function TeacherHome() {
       <div className="container">
         <h1 style={{ marginTop: 0 }}>Предметы и подтемы</h1>
         {err && <p className="error">{err}</p>}
-        <div className="grid-2">
-          {topics.map((t) => (
-            <TopicHover key={t.id} topicId={t.id} name={t.name} />
+
+        <div className="grid-2" style={{ marginBottom: '1.5rem' }}>
+          {subjects.map((s) => (
+            <div key={s.id} className="subject-block card">
+              <button type="button" className="subject-block-head" onClick={() => toggleSubject(s.id)} aria-expanded={openSubject.has(s.id)}>
+                <span className="subject-chevron">{openSubject.has(s.id) ? '▼' : '▶'}</span>
+                <span className="subject-title">{s.name}</span>
+              </button>
+              {openSubject.has(s.id) && (
+                <div className="subject-body">
+                  {!details[s.id] && <p className="muted">Загрузка…</p>}
+                  {details[s.id]?.topics?.map((topic) => (
+                    <TopicHover
+                      key={topic.id}
+                      topic={topic}
+                      onSubtopicAdded={(fullTopic) => {
+                        setDetails((d) => {
+                          const cur = d[s.id]
+                          if (!cur) return d
+                          const topics = cur.topics.map((t) => (t.id === fullTopic.id ? fullTopic : t))
+                          return { ...d, [s.id]: { ...cur, topics } }
+                        })
+                      }}
+                    />
+                  ))}
+                  {details[s.id] && <AddTopic subjectId={s.id} onCreated={(row) => onTopicCreated(s.id, row)} />}
+                </div>
+              )}
+            </div>
           ))}
         </div>
-        <CreateTopicForm onCreated={(row) => setTopics((prev) => [...prev, row].sort((a, b) => a.sortOrder - b.sortOrder))} />
+
+        <CreateSubjectForm onCreated={onSubjectCreated} />
       </div>
     </>
   )
 }
 
-function TopicHover({ topicId, name }) {
-  const [detail, setDetail] = useState(null)
-
-  useEffect(() => {
-    api.get(`/topics/${topicId}`).then((r) => setDetail(r.data))
-  }, [topicId])
-
+function TopicHover({ topic, onSubtopicAdded }) {
   return (
-    <div className="topic-hover">
-      <div className="topic-hover-trigger">{name}</div>
+    <div className="topic-hover" style={{ marginBottom: '0.75rem' }}>
+      <div className="topic-hover-trigger">{topic.name}</div>
       <div className="topic-hover-menu">
-        {!detail && <div className="muted" style={{ padding: '0.5rem' }}>Загрузка…</div>}
-        {detail?.subtopics?.map((s) => (
-          <Link key={s.id} to={`/teacher/subtopic/${s.id}`}>
-            {s.name} <span className="muted">({s.taskCount})</span>
+        {topic.subtopics?.map((sub) => (
+          <Link key={sub.id} to={`/teacher/subtopic/${sub.id}`}>
+            {sub.name} <span className="muted">({sub.taskCount})</span>
           </Link>
         ))}
-        {detail && <AddSubtopic topicId={topicId} onAdded={(d) => setDetail(d)} />}
+        <AddSubtopic topicId={topic.id} onAdded={onSubtopicAdded} />
       </div>
     </div>
   )
@@ -88,7 +154,7 @@ function AddSubtopic({ topicId, onAdded }) {
     if (!name.trim()) return
     setBusy(true)
     try {
-      const { data } = await api.post(`/teacher/topics/${topicId}/subtopics`, { name: name.trim() })
+      await api.post(`/teacher/topics/${topicId}/subtopics`, { name: name.trim() })
       setName('')
       const full = await api.get(`/topics/${topicId}`)
       onAdded(full.data)
@@ -112,7 +178,53 @@ function AddSubtopic({ topicId, onAdded }) {
   )
 }
 
-function CreateTopicForm({ onCreated }) {
+function AddTopic({ subjectId, onCreated }) {
+  const [name, setName] = useState('')
+  const [slug, setSlug] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [localErr, setLocalErr] = useState('')
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setLocalErr('')
+    setBusy(true)
+    try {
+      const { data } = await api.post(`/teacher/subjects/${subjectId}/topics`, {
+        name: name.trim(),
+        slug: slug.trim() || undefined
+      })
+      onCreated(data)
+      setName('')
+      setSlug('')
+    } catch (ex) {
+      setLocalErr(ex.response?.data?.error || 'Не удалось создать тему')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} style={{ padding: '0.75rem', borderTop: '1px solid var(--border)' }}>
+      <div className="muted" style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+        Новая тема в этом предмете
+      </div>
+      <div className="field" style={{ marginBottom: '0.5rem' }}>
+        <label>Название</label>
+        <input value={name} onChange={(e) => setName(e.target.value)} required />
+      </div>
+      <div className="field" style={{ marginBottom: '0.5rem' }}>
+        <label>Slug (необязательно)</label>
+        <input value={slug} onChange={(e) => setSlug(e.target.value)} />
+      </div>
+      {localErr && <p className="error">{localErr}</p>}
+      <button className="btn btn-primary" type="submit" disabled={busy}>
+        Создать тему
+      </button>
+    </form>
+  )
+}
+
+function CreateSubjectForm({ onCreated }) {
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [err, setErr] = useState('')
@@ -123,12 +235,12 @@ function CreateTopicForm({ onCreated }) {
     setErr('')
     setBusy(true)
     try {
-      const { data } = await api.post('/teacher/topics', { name: name.trim(), slug: slug.trim() || name.trim().toLowerCase().replace(/\s+/g, '-') })
+      const { data } = await api.post('/teacher/subjects', { name: name.trim(), slug: slug.trim() || undefined })
       onCreated(data)
       setName('')
       setSlug('')
     } catch (ex) {
-      setErr(ex.response?.data?.error || 'Не удалось создать тему')
+      setErr(ex.response?.data?.error || 'Не удалось создать предмет')
     } finally {
       setBusy(false)
     }
@@ -136,7 +248,7 @@ function CreateTopicForm({ onCreated }) {
 
   return (
     <div className="card" style={{ marginTop: '2rem' }}>
-      <h2 style={{ marginTop: 0 }}>Новая тема</h2>
+      <h2 style={{ marginTop: 0 }}>Новый предмет</h2>
       <form onSubmit={submit} className="grid-2">
         <div className="field" style={{ marginBottom: 0 }}>
           <label>Название</label>
@@ -149,7 +261,7 @@ function CreateTopicForm({ onCreated }) {
         {err && <p className="error">{err}</p>}
         <div style={{ gridColumn: '1 / -1' }}>
           <button className="btn btn-primary" type="submit" disabled={busy}>
-            Создать тему
+            Создать предмет
           </button>
         </div>
       </form>

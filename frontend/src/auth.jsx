@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import api, { loadStoredToken, setToken } from './api'
+import api from './api'
 
 const AuthContext = createContext(null)
 
@@ -8,17 +8,10 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   const refreshMe = useCallback(async () => {
-    const t = loadStoredToken()
-    if (!t) {
-      setUser(null)
-      setLoading(false)
-      return
-    }
     try {
       const { data } = await api.get('/auth/me')
       setUser(data)
     } catch {
-      setToken(null)
       setUser(null)
     } finally {
       setLoading(false)
@@ -31,30 +24,22 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password, portal) => {
     const { data } = await api.post('/auth/login', { email, password, portal })
-    setToken(data.token)
-    setUser({
-      userId: data.userId,
-      email: data.email,
-      displayName: data.displayName,
-      role: data.role
-    })
+    setUser(data)
     return data
   }
 
   const register = async (email, password, displayName) => {
     const { data } = await api.post('/auth/register', { email, password, displayName })
-    setToken(data.token)
-    setUser({
-      userId: data.userId,
-      email: data.email,
-      displayName: data.displayName,
-      role: data.role
-    })
+    setUser(data)
     return data
   }
 
-  const logout = () => {
-    setToken(null)
+  const logout = async () => {
+    try {
+      await api.post('/auth/logout')
+    } catch {
+      /* ignore */
+    }
     setUser(null)
   }
 

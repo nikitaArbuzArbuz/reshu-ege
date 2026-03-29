@@ -34,23 +34,37 @@ public class VariantService {
 
     @Transactional(readOnly = true)
     public TaskDtos.VariantBuildResponse build(TaskDtos.VariantBuildRequest req) {
-        for (Long sid : req.subtopicIds()) {
-            if (!subtopicRepository.existsById(sid)) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Подтема не найдена: " + sid);
+        boolean anyPositive = req.allocations().stream().anyMatch(a -> a.count() != null && a.count() > 0);
+        if (!anyPositive) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Укажите число задач хотя бы по одной подтеме");
+        }
+        List<Task> picked = new ArrayList<>();
+        for (TaskDtos.SubtopicAllocation a : req.allocations()) {
+            int c = a.count() == null ? 0 : a.count();
+            if (c <= 0) {
+                continue;
             }
+            if (!subtopicRepository.existsById(a.subtopicId())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Подтема не найдена: " + a.subtopicId());
+            }
+            List<Task> pool = taskRepository.findBySubtopicIdIn(List.of(a.subtopicId()));
+            if (pool.isEmpty()) {
+                continue;
+            }
+            Collections.shuffle(pool);
+            int n = Math.min(c, pool.size());
+            picked.addAll(pool.subList(0, n));
         }
-        List<Task> all = taskRepository.findBySubtopicIdIn(req.subtopicIds());
-        if (all.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "В выбранных подтемах пока нет задач");
+        if (picked.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Нет задач по выбранным подтемам");
         }
-        Collections.shuffle(all);
-        int n = Math.min(req.taskCount(), all.size());
-        List<Task> pick = all.subList(0, n);
-        List<TaskDtos.TaskPublicDto> dtos = pick.stream().map(this::toPublic).toList();
+        Collections.shuffle(picked);
+        List<TaskDtos.TaskPublicDto> dtos = picked.stream().map(this::toPublic).toList();
         return new TaskDtos.VariantBuildResponse(dtos);
     }
 
     private TaskDtos.TaskPublicDto toPublic(Task t) {
+        String subjectName = t.getSubtopic().getTopic().getSubject().getName();
         String topicName = t.getSubtopic().getTopic().getName();
         String subtopicName = t.getSubtopic().getName();
         List<TaskDtos.TaskOptionDto> opts = t.getOptions().stream()
@@ -60,8 +74,9 @@ public class VariantService {
         return new TaskDtos.TaskPublicDto(
                 t.getId(),
                 t.getSubtopic().getId(),
-                subtopicName,
+                subjectName,
                 topicName,
+                subtopicName,
                 t.getType(),
                 t.getQuestionText(),
                 t.getType() == TaskType.MULTIPLE_CHOICE ? opts : List.of()

@@ -21,9 +21,17 @@ public class TeacherController {
         this.topicService = topicService;
     }
 
-    @PostMapping("/topics")
-    public TopicDtos.TopicSummary createTopic(@Valid @RequestBody TopicDtos.TopicCreateRequest body) {
-        return topicService.createTopic(body.name(), body.slug());
+    @PostMapping("/subjects")
+    public TopicDtos.SubjectSummary createSubject(@Valid @RequestBody TopicDtos.SubjectCreateRequest body) {
+        return topicService.createSubject(body.name(), body.slug());
+    }
+
+    @PostMapping("/subjects/{subjectId}/topics")
+    public TopicDtos.TopicSummary createTopic(
+            @PathVariable Long subjectId,
+            @Valid @RequestBody TopicDtos.TopicCreateRequest body
+    ) {
+        return topicService.createTopic(subjectId, body.name(), body.slug());
     }
 
     @PostMapping("/topics/{topicId}/subtopics")

@@ -16,11 +16,6 @@ public class TopicController {
         this.topicService = topicService;
     }
 
-    @GetMapping
-    public List<TopicDtos.TopicSummary> list() {
-        return topicService.listTopics();
-    }
-
     @GetMapping("/{id}")
     public TopicDtos.TopicDetail get(@PathVariable Long id) {
         return topicService.getTopic(id);

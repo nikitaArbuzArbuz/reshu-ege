@@ -270,3 +270,95 @@ textarea {
   background: #fee2e2;
   color: #991b1b;
 }
+
+.subject-block {
+  padding: 0;
+  overflow: hidden;
+}
+
+.subject-block-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  padding: 1rem 1.1rem;
+  border: none;
+  background: linear-gradient(135deg, #fff, #f0f6ff);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.subject-block-head:hover {
+  background: #eff6ff;
+}
+
+.subject-chevron {
+  color: var(--muted);
+  font-size: 0.85rem;
+  width: 1.25rem;
+}
+
+.subject-title {
+  flex: 1;
+}
+
+.subject-body {
+  padding: 0 1.1rem 1.1rem;
+  border-top: 1px solid var(--border);
+}
+
+.topic-in-subject {
+  margin-top: 1rem;
+}
+
+.topic-in-subject-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.alloc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.alloc-table th {
+  text-align: left;
+  padding: 0.35rem 0.5rem 0.35rem 0;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.alloc-table td {
+  padding: 0.45rem 0.5rem 0.45rem 0;
+  vertical-align: middle;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.alloc-table .col-qty {
+  width: 11rem;
+}
+
+.qty-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.qty-btn {
+  min-width: 2rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.qty-input {
+  width: 3rem;
+  text-align: center;
+  padding: 0.35rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}

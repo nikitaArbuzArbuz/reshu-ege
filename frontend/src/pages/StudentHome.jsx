@@ -1,44 +1,73 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api'
 import { useAuth } from '../auth'
 
+const ALLOC_KEY = 'egeVariantAllocations'
+
 export default function StudentHome() {
   const nav = useNavigate()
   const { user, logout, isTeacher, isAdmin } = useAuth()
-  const [topics, setTopics] = useState([])
-  const [selected, setSelected] = useState(() => new Set())
-  const [count, setCount] = useState(5)
+  const [subjects, setSubjects] = useState([])
+  const [details, setDetails] = useState({})
+  const [openSubject, setOpenSubject] = useState(() => new Set())
+  const [counts, setCounts] = useState({})
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     api
-      .get('/topics')
-      .then((r) => setTopics(r.data))
-      .catch(() => setErr('Не удалось загрузить темы'))
+      .get('/subjects')
+      .then((r) => setSubjects(r.data))
+      .catch(() => setErr('Не удалось загрузить предметы'))
       .finally(() => setLoading(false))
   }, [])
 
-  const toggleSub = (id) => {
-    setSelected((prev) => {
+  const loadSubject = useCallback((subjectId) => {
+    if (details[subjectId]) return
+    api.get(`/subjects/${subjectId}`).then((r) => {
+      setDetails((d) => ({ ...d, [subjectId]: r.data }))
+    })
+  }, [details])
+
+  const toggleSubject = (id) => {
+    setOpenSubject((prev) => {
       const n = new Set(prev)
       if (n.has(id)) n.delete(id)
-      else n.add(id)
+      else {
+        n.add(id)
+        loadSubject(id)
+      }
       return n
     })
   }
 
+  const setCount = (subtopicId, value) => {
+    const v = Math.min(50, Math.max(0, Number(value) || 0))
+    setCounts((c) => ({ ...c, [subtopicId]: v }))
+  }
+
+  const bump = (subtopicId, delta) => {
+    const cur = counts[subtopicId] ?? 0
+    setCount(subtopicId, cur + delta)
+  }
+
   const start = () => {
-    if (selected.size === 0) {
-      setErr('Выберите хотя бы одну подтему')
+    const allocations = Object.entries(counts)
+      .filter(([, c]) => c > 0)
+      .map(([subtopicId, count]) => ({ subtopicId: Number(subtopicId), count }))
+    if (allocations.length === 0) {
+      setErr('Укажите число задач хотя бы по одной подтеме')
       return
     }
-    const ids = [...selected]
-    const q = new URLSearchParams()
-    q.set('subtopicIds', ids.join(','))
-    q.set('taskCount', String(count))
-    nav(`/variant?${q.toString()}`)
+    setErr('')
+    try {
+      sessionStorage.setItem(ALLOC_KEY, JSON.stringify(allocations))
+    } catch {
+      setErr('Не удалось сохранить настройки варианта')
+      return
+    }
+    nav('/variant')
   }
 
   return (
@@ -68,42 +97,81 @@ export default function StudentHome() {
       </header>
       <div className="container">
         <h1 style={{ marginTop: 0 }}>Собрать вариант</h1>
-        {loading && <p className="muted">Загрузка тем…</p>}
+        <p className="muted" style={{ marginTop: 0 }}>
+          Выберите предмет, затем укажите, сколько заданий взять из каждой подтемы.
+        </p>
+        {loading && <p className="muted">Загрузка…</p>}
         {err && !loading && <p className="error">{err}</p>}
-        <div className="field" style={{ maxWidth: 200 }}>
-          <label>Число заданий в варианте</label>
-          <input type="number" min={1} max={50} value={count} onChange={(e) => setCount(Number(e.target.value))} />
-        </div>
-        {topics.map((t) => (
-          <TopicCard key={t.id} topicId={t.id} name={t.name} selected={selected} onToggle={toggleSub} />
+
+        {subjects.map((s) => (
+          <div key={s.id} className="subject-block card" style={{ marginBottom: '1rem' }}>
+            <button
+              type="button"
+              className="subject-block-head"
+              onClick={() => toggleSubject(s.id)}
+              aria-expanded={openSubject.has(s.id)}
+            >
+              <span className="subject-chevron">{openSubject.has(s.id) ? '▼' : '▶'}</span>
+              <span className="subject-title">{s.name}</span>
+              <span className="muted" style={{ fontWeight: 400 }}>
+                ({s.topicCount} {s.topicCount === 1 ? 'тема' : 'тем'})
+              </span>
+            </button>
+            {openSubject.has(s.id) && (
+              <div className="subject-body">
+                {!details[s.id] && <p className="muted">Загрузка тем…</p>}
+                {details[s.id]?.topics?.map((topic, ti) => (
+                  <div key={topic.id} className="topic-in-subject">
+                    <h3 className="topic-in-subject-title">
+                      {ti + 1}. {topic.name}
+                    </h3>
+                    <table className="alloc-table">
+                      <thead>
+                        <tr>
+                          <th className="col-qty">Количество</th>
+                          <th>Подтема</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {topic.subtopics?.map((sub) => (
+                          <tr key={sub.id}>
+                            <td className="col-qty">
+                              <div className="qty-stepper">
+                                <button type="button" className="btn btn-ghost qty-btn" onClick={() => bump(sub.id, -1)} aria-label="Меньше">
+                                  −
+                                </button>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={50}
+                                  value={counts[sub.id] ?? 0}
+                                  onChange={(e) => setCount(sub.id, e.target.value)}
+                                  className="qty-input"
+                                />
+                                <button type="button" className="btn btn-ghost qty-btn" onClick={() => bump(sub.id, 1)} aria-label="Больше">
+                                  +
+                                </button>
+                              </div>
+                            </td>
+                            <td>
+                              {sub.name}
+                              <span className="muted"> · {sub.taskCount} шт.</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         ))}
+
         <button type="button" className="btn btn-primary" style={{ marginTop: '1rem' }} onClick={start}>
           Начать решение
         </button>
       </div>
     </>
-  )
-}
-
-function TopicCard({ topicId, name, selected, onToggle }) {
-  const [detail, setDetail] = useState(null)
-
-  useEffect(() => {
-    api.get(`/topics/${topicId}`).then((r) => setDetail(r.data))
-  }, [topicId])
-
-  return (
-    <div className="card" style={{ marginBottom: '1rem' }}>
-      <h2 style={{ marginTop: 0 }}>{name}</h2>
-      {!detail && <p className="muted">Загрузка подтем…</p>}
-      {detail?.subtopics?.map((s) => (
-        <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-          <input type="checkbox" checked={selected.has(s.id)} onChange={() => onToggle(s.id)} />
-          <span>
-            {s.name} <span className="muted">({s.taskCount} задач)</span>
-          </span>
-        </label>
-      ))}
-    </div>
   )
 }

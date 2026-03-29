@@ -3,7 +3,6 @@ package com.egeprep.security;
 import com.egeprep.model.Role;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -23,12 +22,10 @@ public class JwtService {
             @Value("${app.jwt.secret}") String secret,
             @Value("${app.jwt.expiration-ms:86400000}") long expirationMs
     ) {
-        byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
-        if (bytes.length < 32) {
-            byte[] padded = new byte[32];
-            System.arraycopy(bytes, 0, padded, 0, Math.min(bytes.length, 32));
-            bytes = padded;
+        if (secret.length() < 32) {
+            throw new IllegalArgumentException("app.jwt.secret must be at least 32 characters");
         }
+        byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
         this.key = Keys.hmacShaKeyFor(bytes);
         this.expirationMs = expirationMs;
     }

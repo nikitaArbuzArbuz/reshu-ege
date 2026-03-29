@@ -1,6 +1,7 @@
 package com.egeprep.config;
 
 import com.egeprep.model.*;
+import com.egeprep.repo.SubjectRepository;
 import com.egeprep.repo.TopicRepository;
 import com.egeprep.repo.UserRepository;
 import org.springframework.boot.ApplicationRunner;
@@ -14,6 +15,7 @@ public class DataInitializer {
     @Bean
     ApplicationRunner seed(
             UserRepository userRepository,
+            SubjectRepository subjectRepository,
             TopicRepository topicRepository,
             PasswordEncoder passwordEncoder
     ) {
@@ -31,9 +33,16 @@ public class DataInitializer {
                 return;
             }
 
+            Subject subject = new Subject();
+            subject.setName("Математика");
+            subject.setSlug("math");
+            subject.setSortOrder(0);
+            subjectRepository.save(subject);
+
             Topic math = new Topic();
-            math.setName("Математика");
-            math.setSlug("math");
+            math.setSubject(subject);
+            math.setName("Профиль");
+            math.setSlug("profile");
             math.setSortOrder(0);
 
             Subtopic st1 = new Subtopic();

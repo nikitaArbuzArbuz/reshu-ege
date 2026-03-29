@@ -1,9 +1,13 @@
 package com.egeprep.dto;
 
 import com.egeprep.model.TaskType;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+
 import java.util.List;
 
 public class TaskDtos {
@@ -14,8 +18,9 @@ public class TaskDtos {
     public record TaskPublicDto(
             Long id,
             Long subtopicId,
-            String subtopicName,
+            String subjectName,
             String topicName,
+            String subtopicName,
             TaskType type,
             String questionText,
             List<TaskOptionDto> options
@@ -44,10 +49,13 @@ public class TaskDtos {
     ) {
     }
 
-    public record VariantBuildRequest(
-            @NotNull @Size(min = 1) List<Long> subtopicIds,
-            @NotNull Integer taskCount
+    public record SubtopicAllocation(
+            @NotNull Long subtopicId,
+            @NotNull @Min(0) @Max(50) Integer count
     ) {
+    }
+
+    public record VariantBuildRequest(@NotNull @Size(min = 1) @Valid List<SubtopicAllocation> allocations) {
     }
 
     public record VariantBuildResponse(List<TaskPublicDto> tasks) {

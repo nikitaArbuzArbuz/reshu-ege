@@ -7,8 +7,6 @@ services:
       POSTGRES_DB: egeprep
       POSTGRES_USER: egeprep
       POSTGRES_PASSWORD: egeprep
-    ports:
-      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -23,10 +21,9 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/egeprep
       SPRING_DATASOURCE_USERNAME: egeprep
       SPRING_DATASOURCE_PASSWORD: egeprep
-      JWT_SECRET: docker-dev-change-me-use-long-secret-at-least-32-characters
+      JWT_SECRET: ${JWT_SECRET:-a7f3c9e2b8d1f4e6a0c5b9d3e7f1a2c8d4e6f0a2b4c6d8e0f2a4b6c8d0e2f4a6b8c0d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0a2b4c6d8e0f2a4b6c8d0e2f4}
+      APP_CORS_ORIGINS: http://localhost:3000,https://localhost:3000
       SERVER_PORT: 8080
-    ports:
-      - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
