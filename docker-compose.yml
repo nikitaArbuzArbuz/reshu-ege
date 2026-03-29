@@ -1,0 +1,42 @@
+name: egeprep
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: egeprep
+      POSTGRES_USER: egeprep
+      POSTGRES_PASSWORD: egeprep
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U egeprep -d egeprep"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/egeprep
+      SPRING_DATASOURCE_USERNAME: egeprep
+      SPRING_DATASOURCE_PASSWORD: egeprep
+      JWT_SECRET: docker-dev-change-me-use-long-secret-at-least-32-characters
+      SERVER_PORT: 8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
